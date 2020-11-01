@@ -8,6 +8,10 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GASAbilitySystemComponent.h"
+#include "GASAttributeSet.h"
+#include "GASGameplayAbility.h"
+#include "GameplayEffectTypes.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AGASExampleCharacter
@@ -45,6 +49,73 @@ AGASExampleCharacter::AGASExampleCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
+
+	// Create ability system component, and set it to be explicitly replicated.
+	AbilitySystemComponent = CreateDefaultSubobject<UGASAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+
+	// Add Attributes.
+	Attributes = CreateDefaultSubobject<UGASAttributeSet>(TEXT("Attributes"));
+}
+
+class UAbilitySystemComponent* AGASExampleCharacter::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+
+void AGASExampleCharacter::InitializeAttributes()
+{
+	if (AbilitySystemComponent && DefaultAttributeEffect)
+	{
+		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+		EffectContext.AddSourceObject(this);
+
+		FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(DefaultAttributeEffect, 1, EffectContext);
+
+		if (SpecHandle.IsValid())
+		{
+			FActiveGameplayEffectHandle GEHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+		}
+	}
+}
+
+void AGASExampleCharacter::GiveAbilities()
+{
+	if (HasAuthority() && AbilitySystemComponent)
+	{
+		for (TSubclassOf<UGASGameplayAbility>& StartupAbility : DefaultAbilities)
+		{
+			// Replace 1 with GetAbilityLevel function call if we end up implementing ability levels.
+			AbilitySystemComponent->GiveAbility(
+				FGameplayAbilitySpec(StartupAbility, 1, static_cast<int32>(StartupAbility.GetDefaultObject()->AbilityInputID), this));
+		}
+	}
+}
+
+void AGASExampleCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// Server GAS Initialize.
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+	InitializeAttributes();
+	GiveAbilities();
+}
+
+void AGASExampleCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	InitializeAttributes();
+
+	if (AbilitySystemComponent && InputComponent)
+	{
+		const FGameplayAbilityInputBinds Binds("Confirm", "Cancel", "EGASAbilityInputID", static_cast<int32>(EGASAbilityInputID::Confirm), static_cast<int32>(EGASAbilityInputID::Cancel));
+		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
+	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -74,6 +145,12 @@ void AGASExampleCharacter::SetupPlayerInputComponent(class UInputComponent* Play
 
 	// VR headset functionality
 	PlayerInputComponent->BindAction("ResetVR", IE_Pressed, this, &AGASExampleCharacter::OnResetVR);
+
+	if (AbilitySystemComponent && InputComponent)
+	{
+		const FGameplayAbilityInputBinds Binds("Confirm", "Cancel", "EGASAbilityInputID", static_cast<int32>(EGASAbilityInputID::Confirm), static_cast<int32>(EGASAbilityInputID::Cancel));
+		AbilitySystemComponent->BindAbilityActivationToInputComponent(InputComponent, Binds);
+	}
 }
 
 

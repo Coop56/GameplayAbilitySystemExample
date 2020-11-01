@@ -7,7 +7,10 @@
 		{
 			"Name": "GASExample",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"GameplayAbilities"
+			]
 		}
 	],
 	"Plugins": [

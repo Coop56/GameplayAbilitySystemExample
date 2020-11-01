@@ -4,10 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "AbilitySystemInterface.h"
+#include "GameplayEffectTypes.h"
 #include "GASExampleCharacter.generated.h"
 
 UCLASS(config=Game)
-class AGASExampleCharacter : public ACharacter
+class AGASExampleCharacter : public ACharacter, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -18,6 +20,13 @@ class AGASExampleCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	class UCameraComponent* FollowCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true"))
+	class UGASAbilitySystemComponent* AbilitySystemComponent;
+
+	UPROPERTY()
+	class UGASAttributeSet* Attributes;
+
 public:
 	AGASExampleCharacter();
 
@@ -28,6 +37,26 @@ public:
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseLookUpRate;
+
+	// Implement IAbilitySystemInterface
+	virtual class UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	virtual void InitializeAttributes();
+	virtual void GiveAbilities();
+
+	// Only called on the Server. Calls before Server's AcknowledgePossession.
+	virtual void PossessedBy(AController* NewController) override;
+
+	// Called on the client, this is where AbilitySystemComponent is set because by this point AbilitySystemComponent will have been initialized.
+	virtual void OnRep_PlayerState() override;
+
+	/** Effect that initializes our default attributes. */
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "GAS")
+	TSubclassOf<class UGameplayEffect> DefaultAttributeEffect;
+
+	/** Default abilities for this Character. These will be removed on Character death and regiven if Character respawns. */
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = "Abilities")
+	TArray<TSubclassOf<class UGASGameplayAbility>> DefaultAbilities;
 
 protected:
 
